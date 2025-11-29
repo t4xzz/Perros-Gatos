@@ -36,8 +36,20 @@ def cargar_modelo():
         ])
         
         print("Cargando pesos desde archivos .bin...")
-        pesos1 = cargar_pesos('group1-shard1of2.bin')
-        pesos2 = cargar_pesos('group1-shard2of2.bin')
+        
+        # --- CÓDIGO INFALIBLE ---
+        # 1. Obtiene la ruta exacta donde está guardado app.py
+        directorio_base = os.path.dirname(os.path.abspath(__file__))
+        
+        # 2. Construye la ruta completa a los archivos .bin
+        ruta_bin_1 = os.path.join(directorio_base, 'group1-shard1of2.bin')
+        ruta_bin_2 = os.path.join(directorio_base, 'group1-shard2of2.bin')
+        # ------------------------
+
+        # Usamos las rutas blindadas en lugar de solo el nombre
+        pesos1 = cargar_pesos(ruta_bin_1)
+        pesos2 = cargar_pesos(ruta_bin_2)
+        
         todos_pesos = np.concatenate([pesos1, pesos2])
         
         # Asignar pesos a cada capa
