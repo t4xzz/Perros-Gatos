@@ -36,8 +36,8 @@ def cargar_modelo():
         ])
         
         print("Cargando pesos desde archivos .bin...")
-        pesos1 = cargar_pesos('/workspaces/Perros-Gatos/group1-shard1of2.bin')
-        pesos2 = cargar_pesos('/workspaces/Perros-Gatos/group1-shard2of2.bin')
+        pesos1 = cargar_pesos('group1-shard1of2.bin')
+        pesos2 = cargar_pesos('group1-shard2of2.bin')
         todos_pesos = np.concatenate([pesos1, pesos2])
         
         # Asignar pesos a cada capa
