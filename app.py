@@ -16,8 +16,17 @@ def cargar_modelo():
     """Carga el modelo CNN una sola vez al iniciar la aplicación"""
     global modelo
     
+    # Obtener la ruta absoluta del directorio donde está app.py
+    # Esto arregla los errores de "File not found" en la nube
+    directorio_base = os.path.dirname(os.path.abspath(__file__))
+    
     try:
         def cargar_pesos(ruta_bin):
+            # Verificación de depuración para Git LFS
+            if os.path.exists(ruta_bin):
+                tamano = os.path.getsize(ruta_bin)
+                print(f"--> Cargando: {os.path.basename(ruta_bin)} ({tamano} bytes)")
+            
             with open(ruta_bin, 'rb') as f:
                 return np.frombuffer(f.read(), dtype=np.float32)
         
@@ -35,21 +44,14 @@ def cargar_modelo():
             keras.layers.Dense(1, activation='sigmoid')
         ])
         
-        print("Cargando pesos desde archivos .bin...")
+        print("Iniciando carga de pesos...")
         
-        # --- CÓDIGO INFALIBLE ---
-        # 1. Obtiene la ruta exacta donde está guardado app.py
-        directorio_base = os.path.dirname(os.path.abspath(__file__))
-        
-        # 2. Construye la ruta completa a los archivos .bin
+        # Construir rutas "blindadas" a los archivos
         ruta_bin_1 = os.path.join(directorio_base, 'group1-shard1of2.bin')
         ruta_bin_2 = os.path.join(directorio_base, 'group1-shard2of2.bin')
-        # ------------------------
 
-        # Usamos las rutas blindadas en lugar de solo el nombre
         pesos1 = cargar_pesos(ruta_bin_1)
         pesos2 = cargar_pesos(ruta_bin_2)
-        
         todos_pesos = np.concatenate([pesos1, pesos2])
         
         # Asignar pesos a cada capa
@@ -65,15 +67,26 @@ def cargar_modelo():
                     idx += tamano
                 capa.set_weights(nuevos_pesos)
         
-        print(f"Modelo cargado exitosamente. Parámetros: {modelo.count_params():,}")
+        print(f"✅ Modelo cargado exitosamente. Parámetros: {modelo.count_params():,}")
         return True
         
     except Exception as e:
-        print(f"ERROR al cargar el modelo: {repr(e)}")
+        print(f"❌ ERROR CRÍTICO al cargar el modelo: {repr(e)}")
+        # Importante: No detenemos la app, pero dejamos el modelo como None
         return False
+
+# --- IMPORTANTE: CARGAR EL MODELO AL INICIO ---
+# Esto asegura que Gunicorn (Render) cargue el modelo antes de recibir visitas
+print("Inicializando aplicación...")
+cargar_modelo()
+# ----------------------------------------------
 
 def procesar_imagen(imagen_bytes):
     """Procesa la imagen y realiza la predicción"""
+    # Protección por si el modelo falló al cargar
+    if modelo is None:
+        return None, "El modelo no está disponible (Error de carga en el servidor)"
+
     try:
         # Convertir bytes a numpy array
         nparr = np.frombuffer(imagen_bytes, np.uint8)
@@ -113,7 +126,8 @@ def procesar_imagen(imagen_bytes):
         
         return {
             'resultado': resultado,
-            'confianza': round(float(confianza), 2), # <--- AGREGA float() AQUÍ
+            # CORRECCIÓN JSON: Convertir a float nativo de Python
+            'confianza': round(float(confianza), 2),
             'score': round(float(prediccion), 4),
             'imagen': img_base64
         }, None
@@ -154,20 +168,15 @@ def clasificar():
 
 @app.route('/health')
 def health():
-    """Health check para Cloud Run"""
-    return jsonify({'status': 'ok', 'modelo_cargado': modelo is not None})
+    """Health check para Cloud Run / Render"""
+    return jsonify({
+        'status': 'ok', 
+        'modelo_cargado': modelo is not None
+    })
 
 if __name__ == '__main__':
     print("=" * 70)
-    print("INICIANDO SERVIDOR FLASK")
+    print("INICIANDO SERVIDOR FLASK (MODO LOCAL)")
     print("=" * 70)
-    
-    # Cargar el modelo al iniciar
-    if cargar_modelo():
-        print("Servidor listo para recibir peticiones")
-        print("=" * 70)
-        # Para desarrollo local
-        app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), debug=False)
-    else:
-        print("ERROR: No se pudo cargar el modelo. Verifique los archivos .bin")
-        print("=" * 70)
+    # Nota: cargar_modelo() ya se ejecutó arriba al importar el script
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)), debug=False)
